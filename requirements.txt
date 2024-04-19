@@ -1,7 +1,7 @@
 pandas
+plotly
 streamlit
 langchain
-plotly
 matplotlib
 python-dotenv
 langchain-openai
