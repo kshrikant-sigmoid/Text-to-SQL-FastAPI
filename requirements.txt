@@ -6,3 +6,5 @@ matplotlib
 python-dotenv
 langchain-openai
 langchain-community
+fastapi
+uvicorn
