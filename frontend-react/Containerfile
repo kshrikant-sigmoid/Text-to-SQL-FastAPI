@@ -1,0 +1,11 @@
+# Use an Nginx base image
+FROM nginx:alpine
+
+# Copy static files to the appropriate directory in the Nginx container
+COPY dist /usr/share/nginx/html
+
+# Expose port 80 to the outside world
+EXPOSE 80
+
+# Command to start Nginx when the container starts
+CMD ["nginx", "-g", "daemon off;"]

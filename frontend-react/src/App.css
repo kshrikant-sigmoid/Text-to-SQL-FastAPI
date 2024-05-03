@@ -1,0 +1,106 @@
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+h1 {
+  text-align: center;
+}
+
+form {
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.input-field {
+  width: calc(100% - 22px);
+  padding: 10px;
+  margin-bottom: 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+}
+
+.submit-btn {
+  width: 100px;
+  padding: 10px;
+  background-color: #DB7093;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.submit-btn:hover {
+  background-color: #DB7093;
+}
+
+.query-result {
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  padding: 20px;
+  margin-top: 20px;
+}
+
+.query-result h2 {
+  margin-top: 0;
+}
+
+.result-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.result-table th,
+.result-table td {
+  border: 1px solid #ccc;
+  padding: 8px;
+  text-align: left;
+}
+
+.result-table th {
+  background-color: #f2f2f2;
+}
+
+.btn {
+  display: flex;
+  align-items: center; /* Vertically center the content */
+  background-color: #DB7093;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  padding: 10px;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background-color: #DB7093;
+}
+
+.btn svg {
+  margin-right: 5px; /* Add space between icon and text */
+}
+
+
+.icon-btn {
+  padding: 6px;
+  background-color: #DB7093;
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  margin-right: 10px;
+}
+
+.icon-btn:hover {
+  background-color: #DB7093;
+}
+
+.chart-type-options {
+  display: flex;
+  justify-content: space-between;
+}
+
+.chart-container {
+  margin-top: 20px;
+}

@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-llmsql-deployment
+  labels:
+    app: frontend-llmsql
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: frontend-llmsql
+  template:
+    metadata:
+      labels:
+        app: frontend-llmsql
+    spec:
+      containers:
+        - name: frontend-llmsql
+          image: docker.io/bhaveshs6/frontend-llmsql:v1
+          ports:
+            - containerPort: 80
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-llmsql-service
+spec:
+  selector:
+    app: frontend-llmsql
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+  type: LoadBalancer
+
