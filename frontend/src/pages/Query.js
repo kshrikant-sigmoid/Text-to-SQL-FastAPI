@@ -107,10 +107,29 @@ export default function Home() {
 const renderChart = () => {
   if (!isClient) return null; // Return null if not on client side
 
-  if (Array.isArray(result) && result.length > 0 && result[0].length <= 2){
+  if (Array.isArray(result) && result.length > 0 || result.length <= 2){
     return <p>Not enough data to generate visualization</p>;
   }
  
+   // Find the first numeric column and the first non-numeric column
+   let numericColumnIndex = -1;
+   let nonNumericColumnIndex = -1;
+   for (let i = 0; i < result.length; i++) {
+     if (typeof result[1][i] === 'number') {
+       numericColumnIndex = i;
+       break;
+     }
+   }
+   for (let i = 0; i < result.length; i++) {
+     if (typeof result[1][i] !== 'number') {
+       nonNumericColumnIndex = i;
+       break;
+     }
+   }
+ 
+   // If either the numeric or non-numeric column is not found, return null
+   if (numericColumnIndex === -1 || nonNumericColumnIndex === -1) return null;
+
   // Import Chart dynamically to ensure it's only imported on the client side
   const Chart = require('react-apexcharts').default;
  
@@ -121,8 +140,8 @@ const renderChart = () => {
         <div style={{ height: '400px' }}>
           <Chart
             type="bar"
-            series={[{ data: result.slice(1).map((row) => row[1]) }]}
-            options={{ xaxis: { categories: result.slice(1).map((row) => row[0]) } }}
+            series={[{ data: result.slice(1).map((row) => row[numericColumnIndex]) }]}
+            options={{ xaxis: { categories: result.slice(1).map((row) => row[nonNumericColumnIndex]) } }}
           />
         </div>
       );
@@ -131,7 +150,7 @@ const renderChart = () => {
         <div style={{ height: '400px' }}>
           <Chart
             type="line"
-            series={[{ name: 'Sales', data: result.slice(1).map((row) => row[1]) }]}
+            series={[{ name: 'Sales', data: result.slice(1).map((row) => row[numericColumnIndex]) }]}
             options={{
               chart: {
                 zoom: {
@@ -139,7 +158,7 @@ const renderChart = () => {
                 },
               },
               xaxis: {
-                categories: result.slice(1).map((row) => row[0]),
+                categories: result.slice(1).map((row) => row[nonNumericColumnIndex]),
                 labels: {
                   rotate: -45,
                   offsetY: 5,
@@ -170,8 +189,8 @@ const renderChart = () => {
         <div style={{ height: '400px' }}>
           <Chart
             type="pie"
-            series={result.slice(1).map((row) => row[1])}
-            options={{ labels: result.slice(1).map((row) => row[0]) }}
+            series={result.slice(1).map((row) => row[numericColumnIndex])}
+            options={{ labels: result.slice(1).map((row) => row[nonNumericColumnIndex]) }}
           />
         </div>
       );

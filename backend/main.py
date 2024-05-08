@@ -1,37 +1,51 @@
-from fastapi import FastAPI, Request, HTTPException
-import os
-import ast
-import pandas as pd
+from fastapi import FastAPI, Request, HTTPException, UploadFile,File
+from fastapi import Depends, status
+from fastapi.security import OAuth2PasswordBearer
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Query
+from fastapi.responses import JSONResponse
 from langchain_openai import AzureOpenAI
 from langchain_community.agent_toolkits import create_sql_agent
 from langchain_community.tools.sql_database.tool import QuerySQLDataBaseTool
 from langchain.chains import create_sql_query_chain
 from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain.sql_database import SQLDatabase
-from dotenv import load_dotenv
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi import Query
-from typing import List
 from langchain.cache import SQLiteCache
 from langchain.globals import set_llm_cache
+from langchain import hub
+from langchain_openai import AzureChatOpenAI
+from langchain_community.document_loaders import AzureAIDocumentIntelligenceLoader
+from langchain_openai import AzureOpenAIEmbeddings
+from langchain.schema import StrOutputParser
+from langchain.schema.runnable import RunnablePassthrough
+from langchain.text_splitter import MarkdownHeaderTextSplitter
+from langchain.vectorstores.azuresearch import AzureSearch
+import os
+import ast
+import pandas as pd
+from dotenv import load_dotenv
+from typing import List
 import sqlite3
 from sqlite3 import Error as SQLiteError
 import secrets
 import jwt
 from datetime import datetime, timedelta
-from fastapi import Depends, status
-from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
+from azure.search.documents.indexes import SearchIndexClient
+from azure.core.credentials import AzureKeyCredential
 
 load_dotenv()
 
 app = FastAPI()
 
+class Question(BaseModel):
+    question: str
+
 class User(BaseModel):
     username: str
-    password: str
+    password: str  
 
 origins = [
     "http://localhost:3000",
@@ -59,12 +73,14 @@ user_db = get_db()
 cursor = user_db.cursor()
 cursor.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, password TEXT)")
 cursor.execute("CREATE TABLE IF NOT EXISTS history (histroy_id INTEGER PRIMARY KEY AUTOINCREMENT, id INTEGER, question TEXT, query TEXT, result TEXT, insights TEXT, FOREIGN KEY(id) REFERENCES users(id))")
+cursor.execute("CREATE TABLE IF NOT EXISTS documents (index_id INTEGER PRIMARY KEY AUTOINCREMENT,id INTEGER, index_name TEXT, filename TEXT, FOREIGN KEY(id) REFERENCES users(id))")
+cursor.execute("CREATE TABLE IF NOT EXISTS documents_history (history_id INTEGER PRIMARY KEY AUTOINCREMENT, id INTEGER, question TEXT, answer TEXT, index_name TEXT, FOREIGN KEY(id) REFERENCES users(id), FOREIGN KEY(index_name) REFERENCES documents(index_name))")
 
 # Connect to the SQL database and LangChain LLM
 cache = SQLiteCache(database_path=".langchain.db")
 set_llm_cache(cache)
 db = SQLDatabase.from_uri("sqlite:///data/Chinook.db")
-llm = AzureOpenAI(deployment_name=os.environ.get('OPENAI_DEPLOYMENT_NAME'), model_name=os.environ.get('OPENAI_MODEL_NAME'), temperature=0)
+llm = AzureOpenAI(deployment_name=os.environ.get('OPENAI_DEPLOYMENT_NAME'), model_name=os.environ.get('OPENAI_DEPLOYMENT_NAME'), temperature=0)
 
 # Create SQL Database toolkit and LangChain Agent Executor
 execute_query = QuerySQLDataBaseTool(db=db, llm=llm)
@@ -188,3 +204,99 @@ async def get_history(user_id: int = Depends(get_current_user)):
         raise HTTPException(status_code=400, detail=str(e)) 
 
     return {"history": history}
+
+
+# Document endpoint
+@app.get("/document")
+async def document_rag(question: Question, user_id: int = Depends(get_current_user), file: UploadFile = File(None)):
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    try:
+        contents = await file.read()
+
+        with open(file.filename, 'wb') as f:
+            f.write(contents)
+
+        # Initiate Azure AI Document Intelligence to load the document. You can either specify file_path or url_path to load the document.
+        loader = AzureAIDocumentIntelligenceLoader(file_path=file.filename, api_key = os.environ('AZURE_DOCUMENT_INTELLIGENCE_KEY'), api_endpoint = os.environ('AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT'), api_model="prebuilt-layout")
+        docs = loader.load()
+
+        # Split the document into chunks base on markdown headers.
+        headers_to_split_on = [
+            ("#", "Header 1"),
+            ("##", "Header 2"),
+            ("###", "Header 3"),
+        ]
+        text_splitter = MarkdownHeaderTextSplitter(headers_to_split_on=headers_to_split_on)
+
+        docs_string = docs[0].page_content
+        splits = text_splitter.split_text(docs_string)
+
+        # Embed the splitted documents and insert into Azure Search vector store
+
+        aoai_embeddings = AzureOpenAIEmbeddings(
+            azure_deployment= os.environ('AZURE_EMBEDDING_DEPLOYMENT_NAME'),
+            openai_api_version= os.environ('OPENAI_API_VERSION'),
+            api_key = os.environ('AZURE_OPENAI_API_KEY') ,
+            azure_endpoint = os.environ('AZURE_OPENAI_ENDPOINT'), 
+        )
+        
+        vector_store_address: str = os.environ('VECTOR_STORE_ADDRESS')
+        vector_store_password: str = os.environ('VECTOR_STORE_PASSWORD')    
+
+        index_name = file.filename.lower().replace('.', '-')
+
+        cursor.execute("SELECT index_name FROM documents WHERE index_name = ? AND id = ?", (index_name,user_id))
+        index_result = cursor.fetchone()
+
+        if index_result is None:
+            cursor.execute("INSERT INTO documents (id, index_name, filename) VALUES (?,?,?)", (user_id,index_name, file.filename))
+            cursor.commit()  
+
+        index_name: str = index_result
+        vector_store: AzureSearch = AzureSearch(
+            azure_search_endpoint=vector_store_address,
+            azure_search_key=vector_store_password,
+            index_name=index_name,
+            embedding_function=aoai_embeddings.embed_query,
+        )
+
+        def get_index(name):
+            client = SearchIndexClient(os.environ('VECTOR_STORE_ADDRESS'), AzureKeyCredential(os.environ('VECTOR_STORE_PASSWORD')))
+            result = client.get_index(name)
+            return result
+        
+        try:
+            get_index(index_name)
+        except Exception:    
+            vector_store.add_documents(documents=splits)
+        
+        # Retrieve relevant chunks based on the question
+
+        retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 3})
+        
+        prompt = hub.pull("rlm/rag-prompt")
+        llm = AzureChatOpenAI(
+            openai_api_version= os.environ('OPENAI_API_VERSION'),
+            azure_deployment= os.environ('OPENAI_DEPLOYMENT_NAME'),
+            temperature=0,
+        )
+
+        def format_docs(docs):
+            return "\n\n".join(doc.page_content for doc in docs)
+
+        rag_chain = (
+            {"context": retriever | format_docs, "question": RunnablePassthrough()}
+            | prompt
+            | llm
+            | StrOutputParser()
+        )
+
+        answer = rag_chain.invoke(question)
+
+        cursor.execute("INSERT INTO documents_history (question, answer, index_name) VALUES (?,?,?)", (question.question, answer, index_name))
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return{"question": question.question, "answer": answer} 
