@@ -7,7 +7,7 @@ const instance = axios.create({
 
 // Add a request interceptor
 instance.interceptors.request.use((config) => {
-  const token = document.cookie.replace(/(?:(?:^|.*;\s*)token\s*\=\s*([^;]*).*$)|^.*$/, "$1");
+  const token = document.cookie.replace(/(?:(?:^|.*;\s*)token\s*=\s*([^;]*).*$)|^.*$/, "$1");
   config.headers.Authorization =  token ? `Bearer ${token}` : '';
   return config;
 });

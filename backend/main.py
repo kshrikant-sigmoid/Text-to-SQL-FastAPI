@@ -40,9 +40,9 @@ load_dotenv()
 
 app = FastAPI()
 
-class Question(BaseModel):
+class DocumentRequest(BaseModel):
     question: str
-
+    index_name: str
 class User(BaseModel):
     username: str
     password: str  
@@ -85,6 +85,21 @@ llm = AzureOpenAI(deployment_name=os.environ.get('OPENAI_DEPLOYMENT_NAME'), mode
 # Create SQL Database toolkit and LangChain Agent Executor
 execute_query = QuerySQLDataBaseTool(db=db, llm=llm)
 agent_executor = create_sql_query_chain(llm, db)
+        
+vector_store_address: str = os.environ['VECTOR_STORE_ADDRESS']
+vector_store_password: str = os.environ['VECTOR_STORE_PASSWORD']
+
+aoai_embeddings = AzureOpenAIEmbeddings(
+    azure_deployment= os.environ['AZURE_EMBEDDING_DEPLOYMENT_NAME'],
+    openai_api_version= os.environ['OPENAI_API_VERSION'],
+    api_key = os.environ['AZURE_OPENAI_API_KEY'],
+    azure_endpoint = os.environ['AZURE_OPENAI_ENDPOINT'], 
+)  
+
+def get_index(name):
+    client = SearchIndexClient(os.environ['VECTOR_STORE_ADDRESS'], AzureKeyCredential(os.environ['VECTOR_STORE_PASSWORD']))
+    result = client.get_index(name)
+    return result
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
@@ -207,18 +222,20 @@ async def get_history(user_id: int = Depends(get_current_user)):
 
 
 # Document endpoint
-@app.get("/document")
-async def document_rag(question: Question, user_id: int = Depends(get_current_user), file: UploadFile = File(None)):
+@app.post("/upload/")
+async def upload(user_id: int = Depends(get_current_user), file: UploadFile = File(...)):
     if user_id is None:
         raise HTTPException(status_code=401, detail="Unauthorized")
     try:
         contents = await file.read()
 
-        with open(file.filename, 'wb') as f:
+        file_path = os.path.abspath(file.filename)
+
+        with open(file_path, 'wb') as f:
             f.write(contents)
 
         # Initiate Azure AI Document Intelligence to load the document. You can either specify file_path or url_path to load the document.
-        loader = AzureAIDocumentIntelligenceLoader(file_path=file.filename, api_key = os.environ('AZURE_DOCUMENT_INTELLIGENCE_KEY'), api_endpoint = os.environ('AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT'), api_model="prebuilt-layout")
+        loader = AzureAIDocumentIntelligenceLoader(file_path=file_path, api_key = os.environ['AZURE_DOCUMENT_INTELLIGENCE_KEY'], api_endpoint = os.environ['AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT'], api_model="prebuilt-layout")
         docs = loader.load()
 
         # Split the document into chunks base on markdown headers.
@@ -233,52 +250,69 @@ async def document_rag(question: Question, user_id: int = Depends(get_current_us
         splits = text_splitter.split_text(docs_string)
 
         # Embed the splitted documents and insert into Azure Search vector store
+        index_name = file.filename.lower().replace('.', '-').replace('-pdf','').replace(' ','')
 
-        aoai_embeddings = AzureOpenAIEmbeddings(
-            azure_deployment= os.environ('AZURE_EMBEDDING_DEPLOYMENT_NAME'),
-            openai_api_version= os.environ('OPENAI_API_VERSION'),
-            api_key = os.environ('AZURE_OPENAI_API_KEY') ,
-            azure_endpoint = os.environ('AZURE_OPENAI_ENDPOINT'), 
-        )
-        
-        vector_store_address: str = os.environ('VECTOR_STORE_ADDRESS')
-        vector_store_password: str = os.environ('VECTOR_STORE_PASSWORD')    
-
-        index_name = file.filename.lower().replace('.', '-')
+        try:
+            get_index(index_name)
+        except Exception:
+            index_name: str = index_name
+            vector_store: AzureSearch = AzureSearch(
+                azure_search_endpoint=vector_store_address,
+                azure_search_key=vector_store_password,
+                index_name=index_name,
+                embedding_function=aoai_embeddings.embed_query,
+            )    
+            vector_store.add_documents(documents=splits)
 
         cursor.execute("SELECT index_name FROM documents WHERE index_name = ? AND id = ?", (index_name,user_id))
         index_result = cursor.fetchone()
 
-        if index_result is None:
-            cursor.execute("INSERT INTO documents (id, index_name, filename) VALUES (?,?,?)", (user_id,index_name, file.filename))
-            cursor.commit()  
+        if index_result is not None:
+            index_result = index_result[0]
+            print(index_result)
+        else:
+            cursor.execute("INSERT INTO documents (id, index_name, filename) VALUES (?,?,?)", (user_id,index_name, file.filename.replace('.pdf','')))
+            user_db.commit()
 
-        index_name: str = index_result
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return{"message":"File process successfully"}
+
+@app.get("/index_names/")
+async def index_names(request: Request, user_id: int = Depends(get_current_user)):
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    try:
+        cursor.execute("SELECT index_name FROM documents WHERE id = ?", (user_id,))
+        index_names = cursor.fetchall()      
+
+        return {"index_names":index_names}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/document/")
+async def document_rag(request: DocumentRequest, user_id: int = Depends(get_current_user)):
+    if user_id is None:    
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    try:
+        index_name: str = request.index_name
         vector_store: AzureSearch = AzureSearch(
             azure_search_endpoint=vector_store_address,
             azure_search_key=vector_store_password,
             index_name=index_name,
             embedding_function=aoai_embeddings.embed_query,
         )
-
-        def get_index(name):
-            client = SearchIndexClient(os.environ('VECTOR_STORE_ADDRESS'), AzureKeyCredential(os.environ('VECTOR_STORE_PASSWORD')))
-            result = client.get_index(name)
-            return result
-        
-        try:
-            get_index(index_name)
-        except Exception:    
-            vector_store.add_documents(documents=splits)
         
         # Retrieve relevant chunks based on the question
 
         retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 3})
         
         prompt = hub.pull("rlm/rag-prompt")
-        llm = AzureChatOpenAI(
-            openai_api_version= os.environ('OPENAI_API_VERSION'),
-            azure_deployment= os.environ('OPENAI_DEPLOYMENT_NAME'),
+        doc_llm = AzureChatOpenAI(
+            openai_api_version= os.environ['OPENAI_API_VERSION'],
+            azure_deployment= os.environ['OPENAI_DEPLOYMENT_NAME'],
             temperature=0,
         )
 
@@ -288,15 +322,15 @@ async def document_rag(question: Question, user_id: int = Depends(get_current_us
         rag_chain = (
             {"context": retriever | format_docs, "question": RunnablePassthrough()}
             | prompt
-            | llm
+            | doc_llm
             | StrOutputParser()
         )
 
-        answer = rag_chain.invoke(question)
+        answer = rag_chain.invoke(request.question)
 
-        cursor.execute("INSERT INTO documents_history (question, answer, index_name) VALUES (?,?,?)", (question.question, answer, index_name))
+        user_db.execute("INSERT INTO documents_history (question, answer, index_name) VALUES (?,?,?)", (request.question, answer, request.index_name))
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    return{"question": question.question, "answer": answer} 
+    return{"question": request.question, "answer": answer} 

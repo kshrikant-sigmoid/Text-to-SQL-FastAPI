@@ -25,7 +25,7 @@ export default function Home() {
 
   const fetchTables = async () => {
     try {
-      const response = await axios.get('/tables/', { withCredentials: true });
+      const response = await axios.get('http://localhost:8000/tables/', { withCredentials: true });
       setAllTables(response.data.tables);
     } catch (error) {
       console.error(error);
@@ -84,7 +84,7 @@ export default function Home() {
     setIsLoading(true);
  
     try {
-      const response = await axios.post('/query/', {
+      const response = await axios.post('http://localhost:8000/query/', {
         question: selectedTables.length > 0 ? `${question} strictly using ${selectedTables.join(', ')} table/s and not other available tables in the database` : question,
         selected_tables: selectedTables,
       },{
@@ -107,7 +107,7 @@ export default function Home() {
 const renderChart = () => {
   if (!isClient) return null; // Return null if not on client side
 
-  if (Array.isArray(result) && result.length > 0 || result.length <= 2){
+  if (Array.isArray(result) && result.length > 0 && result.length <= 2){
     return <p>Not enough data to generate visualization</p>;
   }
  
@@ -201,7 +201,7 @@ const renderChart = () => {
  
   return (
     <div>
-    <div class="dropdown">
+    <div className="dropdown">
         <button className="dropbtn" onClick={() => setDropdownVisible(!dropdownVisible)}>
             {dropdownVisible ? <MdClose /> : <MdMoreVert />}
         </button>
