@@ -269,13 +269,11 @@ async def upload(user_id: int = Depends(get_current_user), file: UploadFile = Fi
 
         if index_result is not None:
             index_result = index_result[0]
-            print(index_result)
         else:
             cursor.execute("INSERT INTO documents (id, index_name, filename) VALUES (?,?,?)", (user_id,index_name, file.filename.replace('.pdf','')))
             user_db.commit()
 
     except Exception as e:
-        print(e)
         raise HTTPException(status_code=400, detail=str(e))
 
     return{"message":"File process successfully"}
@@ -294,6 +292,7 @@ async def index_names(request: Request, user_id: int = Depends(get_current_user)
 
 @app.post("/document/")
 async def document_rag(request: DocumentRequest, user_id: int = Depends(get_current_user)):
+    print(f"Question: {request.question}, index_name/filename: {request.index_name}")
     if user_id is None:    
         raise HTTPException(status_code=401, detail="Unauthorized")
     try:
