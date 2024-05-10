@@ -5,12 +5,12 @@ import axios from '../services/axiosConfig';
 import { Link } from 'react-router-dom';
 import { MdMoreVert, MdClose } from 'react-icons/md';
 import { useNavigate } from 'react-router-dom';
+import History from './History';
  
 export default function Home() {
   const [question, setQuestion] = useState('');
   const [query, setQuery] = useState('');
   const [result, setResult] = useState([]);
-  // const [column_name, setColumnNames] = useState([]);
   const [chartType, setChartType] = useState('pie');
   const [selectedTables, setSelectedTables] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -20,7 +20,11 @@ export default function Home() {
   const [dropdownVisible, setDropdownVisible] = useState(false);
   const navigate = useNavigate();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
- 
+  const [isQuestionSelected, setIsQuestionSelected] = useState(false);
+  const [selectedQuestion, setSelectedQuestion] = useState(null);
+  const [history, setHistory] = useState([]);
+
+  console.log(document.cookie)
  
 
   const fetchTables = async () => {
@@ -32,15 +36,26 @@ export default function Home() {
     }
   };
 
+  const fetchHistory = async () => {
+    try {
+      const response = await axios.get(`http://localhost:8000/history/`);
+      setHistory(response.data.history);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   useEffect(() => {
     setIsClient(true);
     fetchTables();
+    fetchHistory();
+    console.log(selectedQuestion)
     const token = document.cookie.split('; ').find(row => row.startsWith('token')).split('=')[1];
 
     if (token) {
         setIsLoggedIn(true);
     }
-  }, []);
+  }, [selectedQuestion]);
 
   if (!isLoggedIn){
     return (
@@ -55,6 +70,14 @@ export default function Home() {
     document.cookie = 'token=; expired=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
     navigate('/')
   }
+
+  const handleQuestionSelect = (question, query, result, insights) => {
+    setIsQuestionSelected(true);
+    setQuestion(question);
+    setQuery(query);
+    setResult(result);
+    setInsights(insights);
+  };
 
 
  
@@ -102,6 +125,11 @@ export default function Home() {
       setIsLoading(false);
     }
   };
+
+  const handleQuestionClick = (question) => {
+    setSelectedQuestion(question);
+    setIsQuestionSelected(true);
+  };
  
   // Function to render selected chart based on user's choic
 const renderChart = () => {
@@ -147,7 +175,7 @@ const renderChart = () => {
       );
     case 'line':
       return (
-        <div style={{ height: '400px' }}>
+        <div style={{ height: '400px' }} >
           <Chart
             type="line"
             series={[{ name: 'Sales', data: result.slice(1).map((row) => row[numericColumnIndex]) }]}
@@ -201,7 +229,7 @@ const renderChart = () => {
  
   return (
     <div>
-    <div className="dropdown">
+    {/* <div className="dropdown">
         <button className="dropbtn" onClick={() => setDropdownVisible(!dropdownVisible)}>
             {dropdownVisible ? <MdClose /> : <MdMoreVert />}
         </button>
@@ -211,8 +239,28 @@ const renderChart = () => {
             <Link to="/" onClick={handleLogout}>Logout</Link>
         </div>
         )}
-    </div>
+    </div> */}
+    {isQuestionSelected ? (
+      <div className="history-container">
+        <History selectedQuestion={selectedQuestion}  />
+      </div>
+    ) : (
     <div className="container">
+<div className="fixed top-0 left-0 h-screen bg-gray-800 text-white overflow-auto">
+<div className='flex justify-center mt-16'>
+  <div className='text-center border-b-2 border-gray-500 px-10 py-2'>
+    History
+  </div>
+</div>
+  <ul className='pt-4'>
+    {Object.values(history).map((item, index) => (
+      <li key={index} onClick={() => handleQuestionClick(item)} className='px-4 py-2 hover:bg-gray-600 cursor-pointer text-center border-b-2 border-gray-500 px-10 w-56 text-sm overflow-x-auto'>
+  {item.question}
+</li>
+    ))}
+  </ul>
+</div>
+
       <h1 style={{ textAlign: 'center', fontSize: '2em', marginBottom: '20px' }}>SQL Insight Engine</h1>
       <form onSubmit={handleSubmit}>
         <label>
@@ -363,6 +411,7 @@ const renderChart = () => {
  
  
     </div>
+    )}
     </div>
   );
 }

@@ -2,16 +2,11 @@ from fastapi import FastAPI, Request, HTTPException, UploadFile,File
 from fastapi import Depends, status
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import Query
-from fastapi.responses import JSONResponse
 from langchain_openai import AzureOpenAI
-from langchain_community.agent_toolkits import create_sql_agent
 from langchain_community.tools.sql_database.tool import QuerySQLDataBaseTool
 from langchain.chains import create_sql_query_chain
-from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain.sql_database import SQLDatabase
 from langchain.cache import SQLiteCache
-from langchain.globals import set_llm_cache
 from langchain import hub
 from langchain_openai import AzureChatOpenAI
 from langchain_community.document_loaders import AzureAIDocumentIntelligenceLoader
@@ -20,9 +15,9 @@ from langchain.schema import StrOutputParser
 from langchain.schema.runnable import RunnablePassthrough
 from langchain.text_splitter import MarkdownHeaderTextSplitter
 from langchain.vectorstores.azuresearch import AzureSearch
+from langchain.globals import set_llm_cache
 import os
 import ast
-import pandas as pd
 from dotenv import load_dotenv
 from typing import List
 import sqlite3
@@ -35,6 +30,8 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 from azure.search.documents.indexes import SearchIndexClient
 from azure.core.credentials import AzureKeyCredential
+import redis
+from pymongo import MongoClient
 
 load_dotenv()
 
@@ -43,6 +40,7 @@ app = FastAPI()
 class DocumentRequest(BaseModel):
     question: str
     index_name: str
+
 class User(BaseModel):
     username: str
     password: str  
@@ -65,20 +63,33 @@ SECRET_KEY = secrets.token_hex(32)
 ALGORITHM = "HS256"
 app.add_middleware(SessionMiddleware, secret_key = SECRET_KEY, max_age = 3600)
 
-def get_db():
-    conn = sqlite3.connect('user_database.db')  # Replace 'database.db' with the path to your database file
-    return conn
+client = MongoClient("mongodb://localhost:27017/")
+db = client["user_db"]
+user = db["users"]
+sql_history = db["sql_history"]
+documents = db["documents"]
+documents_history = db["documents_history"]
 
-user_db = get_db()
-cursor = user_db.cursor()
-cursor.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, password TEXT)")
-cursor.execute("CREATE TABLE IF NOT EXISTS history (histroy_id INTEGER PRIMARY KEY AUTOINCREMENT, id INTEGER, question TEXT, query TEXT, result TEXT, insights TEXT, FOREIGN KEY(id) REFERENCES users(id))")
-cursor.execute("CREATE TABLE IF NOT EXISTS documents (index_id INTEGER PRIMARY KEY AUTOINCREMENT,id INTEGER, index_name TEXT, filename TEXT, FOREIGN KEY(id) REFERENCES users(id))")
-cursor.execute("CREATE TABLE IF NOT EXISTS documents_history (history_id INTEGER PRIMARY KEY AUTOINCREMENT, id INTEGER, question TEXT, answer TEXT, index_name TEXT, FOREIGN KEY(id) REFERENCES users(id), FOREIGN KEY(index_name) REFERENCES documents(index_name))")
+# def get_db():
+#     conn = sqlite3.connect('user_database.db')  # Replace 'database.db' with the path to your database file
+#     return conn
+
+# user_db = get_db()
+# cursor = user_db.cursor()
+# cursor.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT)")
+# cursor.execute("CREATE TABLE IF NOT EXISTS history (histroy_id INTEGER PRIMARY KEY AUTOINCREMENT, id INTEGER, question TEXT, query TEXT, result TEXT, insights TEXT, FOREIGN KEY(id) REFERENCES users(id))")
+# cursor.execute("CREATE TABLE IF NOT EXISTS documents (index_id INTEGER PRIMARY KEY AUTOINCREMENT,id INTEGER, index_name TEXT, filename TEXT, FOREIGN KEY(id) REFERENCES users(id))")
+# cursor.execute("CREATE TABLE IF NOT EXISTS documents_history (history_id INTEGER PRIMARY KEY AUTOINCREMENT, id INTEGER, question TEXT, answer TEXT, index_name TEXT, FOREIGN KEY(id) REFERENCES users(id), FOREIGN KEY(index_name) REFERENCES documents(index_name))")
 
 # Connect to the SQL database and LangChain LLM
 cache = SQLiteCache(database_path=".langchain.db")
 set_llm_cache(cache)
+
+# client = redis.Redis.from_url('redis://localhost:6379/0')
+
+from langchain.cache import RedisSemanticCache
+
+
 db = SQLDatabase.from_uri("sqlite:///data/Chinook.db")
 llm = AzureOpenAI(deployment_name=os.environ.get('OPENAI_DEPLOYMENT_NAME'), model_name=os.environ.get('OPENAI_DEPLOYMENT_NAME'), temperature=0)
 
@@ -96,6 +107,19 @@ aoai_embeddings = AzureOpenAIEmbeddings(
     azure_endpoint = os.environ['AZURE_OPENAI_ENDPOINT'], 
 )  
 
+
+# redis_url = "redis://:seVATUzIxp83rc3WBoYCuY70wo2TPFbz@redis-18212.c282.east-us-mz.azure.redns.redis-cloud.com:18212"
+
+
+# set_llm_cache(RedisSemanticCache(
+#     embedding=AzureOpenAIEmbeddings(
+#     azure_deployment= os.environ['AZURE_EMBEDDING_DEPLOYMENT_NAME'],
+#     openai_api_version= os.environ['OPENAI_API_VERSION'],
+#     api_key = os.environ['AZURE_OPENAI_API_KEY'],
+#     azure_endpoint = os.environ['AZURE_OPENAI_ENDPOINT'],),
+#     redis_url=redis_url,
+# ))
+
 def get_index(name):
     client = SearchIndexClient(os.environ['VECTOR_STORE_ADDRESS'], AzureKeyCredential(os.environ['VECTOR_STORE_PASSWORD']))
     result = client.get_index(name)
@@ -103,33 +127,62 @@ def get_index(name):
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-# New user registration
-@app.post("/register/")
-async def register_user(user: User):
-    try:
-        cursor.execute(f"INSERT INTO users (username, password) VALUES  (?,?)" ,(user.username, user.password))
-        user_db.commit()
-    except SQLiteError as e:
-        raise HTTPException(status_code=400, detail=str(e))    
-    return {"message": "User registered successfully"}
+# # New user registration
+# @app.post("/register/")
+# async def register_user(user: User):
+#     try:
+#         cursor.execute(f"INSERT INTO users (username, password) VALUES  (?,?)" ,(user.username, user.password))
+#         user_db.commit()
+#     except SQLiteError as e:
+#         raise HTTPException(status_code=400, detail=str(e))    
+#     return {"message": "User registered successfully"}
 
-# Login
-@app.post("/login/")
-async def login_user(user: User, request: Request):
+
+@app.post("/googlelogin/")
+async def google_login(request: Request):
     try:
-        cursor.execute(f"SELECT * FROM users WHERE username='{user.username}' AND password='{user.password}'")
-        user_in_db = cursor.fetchone()
-    except SQLiteError as e:
-        raise HTTPException(status_code=400, detail=str(e))    
-    if user_in_db:
-        user_id = user_in_db[0]
-        expire = datetime.utcnow() + timedelta(minutes=15)
-        token_data = {"id": user_id, "username": user.username, "exp": expire}
-        token = jwt.encode(token_data, SECRET_KEY, algorithm=ALGORITHM)
-        request.session["user_id"] = user_id
+        data = await request.json()
+        jwtToken = data.get('jwtToken')
+        
+        token = jwt.decode(jwtToken, algorithms=["RS256"], options={"verify_signature":False})
+        id = token.get('email')
+        username = token.get('given_name')
+        try:
+            user_in_db = user.find_one({"id": id, "username": username})
+            if user_in_db:
+                id = str(user_in_db["id"])
+            else:
+                new_user = {"id": id, "username": username}
+                inserted_user = user.insert_one(new_user)
+                id = str(inserted_user.inserted_id)
+            expire = datetime.utcnow() + timedelta(minutes=15)
+            token_data = {"id": id, "username": username, "exp": expire}
+            token = jwt.encode(token_data, SECRET_KEY, algorithm=ALGORITHM)
+            request.session["user_id"] = id
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e)) 
         return {"message": "Login successful", "token": token}
-    else:
-        raise HTTPException(status_code=400, detail="Invalid username or password")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Something failed, try again")
+
+
+# # Login
+# @app.post("/login/")
+# async def login_user(user: User, request: Request):
+#     try:
+#         cursor.execute(f"SELECT * FROM users WHERE username='{user.username}' AND password='{user.password}'")
+#         user_in_db = cursor.fetchone()
+#     except SQLiteError as e:
+#         raise HTTPException(status_code=400, detail=str(e))    
+#     if user_in_db:
+#         user_id = user_in_db[0]
+#         expire = datetime.utcnow() + timedelta(minutes=15)
+#         token_data = {"id": user_id, "username": user.username, "exp": expire}
+#         token = jwt.encode(token_data, SECRET_KEY, algorithm=ALGORITHM)
+#         request.session["user_id"] = user_id
+#         return {"message": "Login successful", "token": token}
+#     else:
+#         raise HTTPException(status_code=400, detail="Invalid username or password")
     
 # Define endpoints
 @app.get("/")
@@ -179,7 +232,6 @@ async def run_query(request: Request, user_id: int = Depends(get_current_user)):
         result = execute_query.invoke({"query": query})
 
         insights = llm.invoke(f"Analyze the following data and provide insights related to sales trends and projections. Do not generate content related to programming concepts or other irrelevant topics. The question asked was: {question}. The data fetched after executing the query is: {result}")
-        insights = insights.replace("<|im_end|>","")
         column_name = llm.invoke(f"Given this SQL query: {query}, and result as {result}.  Provide only the names of columns (in format ColumnName) as a Python list.have the column names in the same sequesnce as the result is being displayed , the result is a list of tuple , check for the first tuple about how much data is there , the no of column should not increase that count . Your response should only contain column names and nothing else, in the format ['column1', 'column2', 'column3', ...], without any additional explanations or prompts.")
         start_index = column_name.find('[')
         end_index = column_name.find(']')
@@ -200,9 +252,8 @@ async def run_query(request: Request, user_id: int = Depends(get_current_user)):
                 combined_result[i] = tuple(round(val, 2) if isinstance(val, float) else val for val in combined_result[i])      
 
         combined_result_str = str(combined_result)
-        cursor.execute(f"INSERT INTO history (id, question, query, result, insights) VALUES (?, ?, ?, ?, ?)", (user_id, question, query, combined_result_str, insights))
-        user_db.commit()  
-    except SQLiteError as e:
+        sql_history.insert_one({"id": user_id, "question": question, "query": query, "result": combined_result_str, "insights": insights})
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))                    
     
     return {"question": question, "query": query, "result":  combined_result, "insights": insights}
@@ -211,11 +262,9 @@ async def run_query(request: Request, user_id: int = Depends(get_current_user)):
 @app.get("/history/")
 async def get_history(user_id: int = Depends(get_current_user)):
     try:
-        cursor = user_db.cursor()
-        cursor.execute(f"SELECT * FROM history WHERE id={user_id}")
-        history_records = cursor.fetchall()
-        history = {record[0]: dict(id=record[1], question=record[2], query=record[3], result=record[4], insights=record[5]) for record in history_records}
-    except SQLiteError as e:
+        history_records = sql_history.find({"id": user_id})
+        history = {str(record["_id"]): dict(id=record["id"], question=record["question"], query=record["query"], result=record["result"], insights=record["insights"]) for record in history_records}
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e)) 
 
     return {"history": history}
@@ -264,14 +313,10 @@ async def upload(user_id: int = Depends(get_current_user), file: UploadFile = Fi
             )    
             vector_store.add_documents(documents=splits)
 
-        cursor.execute("SELECT index_name FROM documents WHERE index_name = ? AND id = ?", (index_name,user_id))
-        index_result = cursor.fetchone()
+        index_result = documents.find_one({"index_name": index_name, "id": user_id})
 
-        if index_result is not None:
-            index_result = index_result[0]
-        else:
-            cursor.execute("INSERT INTO documents (id, index_name, filename) VALUES (?,?,?)", (user_id,index_name, file.filename.replace('.pdf','')))
-            user_db.commit()
+        if index_result is None:
+            documents.insert_one({"id": user_id, "index_name": index_name, "filename": file.filename.replace('.pdf','')})
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -279,20 +324,19 @@ async def upload(user_id: int = Depends(get_current_user), file: UploadFile = Fi
     return{"message":"File process successfully"}
 
 @app.get("/index_names/")
-async def index_names(request: Request, user_id: int = Depends(get_current_user)):
+async def index_names(user_id: int = Depends(get_current_user)):
     if user_id is None:
         raise HTTPException(status_code=401, detail="Unauthorized")
     try:
-        cursor.execute("SELECT index_name FROM documents WHERE id = ?", (user_id,))
-        index_names = cursor.fetchall()      
+        index_names_cursor = documents.find({"id": user_id}, {"index_name": 1, "_id": 0})
+        index_names = [doc["index_name"] for doc in index_names_cursor]
 
-        return {"index_names":index_names}
+        return {"index_names": index_names}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/document/")
 async def document_rag(request: DocumentRequest, user_id: int = Depends(get_current_user)):
-    print(f"Question: {request.question}, index_name/filename: {request.index_name}")
     if user_id is None:    
         raise HTTPException(status_code=401, detail="Unauthorized")
     try:
@@ -327,9 +371,28 @@ async def document_rag(request: DocumentRequest, user_id: int = Depends(get_curr
 
         answer = rag_chain.invoke(request.question)
 
-        user_db.execute("INSERT INTO documents_history (question, answer, index_name) VALUES (?,?,?)", (request.question, answer, request.index_name))
+        documents_history.insert_one({"id": user_id, "question": request.question, "answer": answer, "index_name": request.index_name})
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    return{"question": request.question, "answer": answer} 
+    return{"question": request.question, "answer": answer}
+
+
+# History of user
+@app.get("/documentHistory/")
+async def get_history(user_id: int = Depends(get_current_user)):
+    try:
+        history_records_cursor = documents_history.find({"id": user_id})
+        history = {str(record["_id"]): dict(id=record["id"], question=record["question"], answer=record["answer"], filename=record["index_name"]) for record in history_records_cursor}
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=400, detail=str(e)) 
+    return {"history": history}
+
+@app.get("/get-user")
+async def read_current_user(current_user_id: User = Depends(get_current_user)):
+    current_user = user.find_one({"id": current_user_id}, {"username": 1, "_id": 0})
+    if current_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"username": current_user["username"]}

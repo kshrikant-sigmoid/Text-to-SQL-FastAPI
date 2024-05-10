@@ -1,24 +1,61 @@
-/* History.css */
+.question-nav {
+  list-style-type: decimal;
+  padding: 0;
+  margin: 0;
+  background-color: #f3f3f3;
+  width: 200px;
+  height: 100vh;
+  position: fixed;
+  left: 0; 
+  overflow: auto;
+}
+
+.question-nav li {
+  display: block;
+  color: black;
+  padding: 10px;
+  text-decoration: none;
+  border-bottom: 1px solid #ddd;
+}
+
+.question-nav li:hover {
+  background-color: #ddd;
+}
+
 .history-item {
-    border: 1px solid black;
-    margin: 10px;
-    padding: 10px;
-  }
+  margin-left: 210px; /* Same as the width of the nav */
+  padding: 20px;
+  border: 1px solid #ddd;
+  margin-top: 20px;
+}
 
+.container {
+  display: flex;
+}
 
-.notLoggedInContainer {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-    flex-direction: column;
-    background-color: #f8d7da;
-    color: #721c24;
-    padding: 20px;
-    border-radius: 5px;
-  }
-  
-  .notLoggedInContainer a {
-    color: #0056b3;
-    text-decoration: none;
-  }
+.question-nav li {
+  list-style-type: none;
+  padding: 10px;
+  cursor: pointer;
+}
+
+.card-container {
+  flex-grow: 1;
+  padding-left: 20px;
+}
+
+.history-card {
+  margin-left: 14%;
+  margin-top: 5px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  padding: 20px;
+  margin-bottom: 10px;
+  width: 85%;
+  box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);
+}
+
+.history-card h3 {
+  margin-top: 0;
+  margin-right: 12%;
+}

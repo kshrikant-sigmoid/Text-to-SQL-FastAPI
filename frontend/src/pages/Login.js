@@ -1,48 +1,50 @@
-import './Login.css';
-import React, { useState } from 'react';
-import axios from 'axios';
-import { useNavigate, Link } from 'react-router-dom';
+import React, { useState } from "react";
+import axios from "axios";
+import { useNavigate } from "react-router-dom";
+import { GoogleLogin } from "@react-oauth/google";
+import Cookies from 'js-cookie';
 
 function Login() {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [jwtToken, setJwtToken] = useState(""); 
   const navigate = useNavigate();
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
+  const handleGoogleSubmit = async (event) => {
+    if (event) event.preventDefault();
     try {
-      const response = await axios.post('http://localhost:8000/login/', {
-        username,
-        password,
+      const response = await axios.post("http://localhost:8000/googlelogin/", {
+        jwtToken,
       });
       if (response.data.token) {
         // Set the token as a cookie
-        const expirationDate = new Date();
-        expirationDate.setMinutes(expirationDate.getMinutes() + 30); 
-        document.cookie = `token=${response.data.token}; expires=${expirationDate.toUTCString()}; path=/`;
-        navigate('/query', {state: {message: response.data.message }});
+        document.cookie = `token=${response.data.token}; max-age=1800`; // expires after 30 minutes
+        navigate("/query", { state: { message: response.data.message } });
+        window.location.reload();
       }
     } catch (error) {
-        if (error.response && error.response.data && error.response.data.detail) {
-            alert(error.response.data.detail);
-          } else {
-            alert('An error occurred while logging in.');
-          }  
+      if (error.response && error.response.data && error.response.data.detail) {
+        alert(error.response.data.detail);
+      } else {
+        alert("An error occurred while logging in.");
+      }
     }
   };
 
   return (
-    <div>
-    <h2>Login</h2>
-    <form onSubmit={handleSubmit}>
-      <input type="text" placeholder='Username' value={username} onChange={(e) => setUsername(e.target.value)} />
-      <input type="password" placeholder='password' value={password} onChange={(e) => setPassword(e.target.value)} />
-      <br></br>
-      <button type="submit">Login</button><br></br><br></br>
-      Don't have an account? <Link to="/register">Register</Link>
-
-    </form>
-    </div>
+<div className="flex justify-center items-center h-screen bg-gray-300 bg-opacity-50">
+  <div className="p-6 max-w-sm mx-auto bg-white rounded-xl shadow-md flex flex-col items-center space-y-4">
+    <h1>Login Using Google</h1>
+    <GoogleLogin
+      onSuccess={(credentialResponse) => {
+        setJwtToken(credentialResponse.credential);
+        handleGoogleSubmit();
+      }}
+      onError={() => {
+        console.log("Login Failed");
+      }}
+      className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded"
+    />
+  </div>
+</div>
   );
 }
 

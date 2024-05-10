@@ -6,8 +6,12 @@ langchainhub
 python-dotenv
 fastapi
 uvicorn
+itsdangerous
+jwt
 openai
 tiktoken
 azure-ai-documentintelligence
 azure-identity 
 azure-search-documents==11.6.0b3
+redis
+pymongo
