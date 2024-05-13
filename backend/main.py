@@ -39,7 +39,7 @@ app = FastAPI()
 
 class DocumentRequest(BaseModel):
     question: str
-    index_name: str
+    filename: str
 
 class User(BaseModel):
     username: str
@@ -280,6 +280,7 @@ async def upload(user_id: int = Depends(get_current_user), file: UploadFile = Fi
 
         file_path = os.path.abspath(file.filename)
 
+        print(file.filename)
         with open(file_path, 'wb') as f:
             f.write(contents)
 
@@ -315,8 +316,9 @@ async def upload(user_id: int = Depends(get_current_user), file: UploadFile = Fi
 
         index_result = documents.find_one({"index_name": index_name, "id": user_id})
 
+
         if index_result is None:
-            documents.insert_one({"id": user_id, "index_name": index_name, "filename": file.filename.replace('.pdf','')})
+            documents.insert_one({"id": user_id, "index_name": index_name, "filename": file.filename})
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -331,7 +333,19 @@ async def index_names(user_id: int = Depends(get_current_user)):
         index_names_cursor = documents.find({"id": user_id}, {"index_name": 1, "_id": 0})
         index_names = [doc["index_name"] for doc in index_names_cursor]
 
-        return {"index_names": index_names}
+        azure_client = SearchIndexClient(os.environ['VECTOR_STORE_ADDRESS'], AzureKeyCredential(os.environ['VECTOR_STORE_PASSWORD']))
+        index_in_azure = list(azure_client.list_index_names())
+        common_indexes = [j for j in index_names if j in index_in_azure]
+
+        # Fetch filenames from the database based on the index names
+        filenames = []
+        for index in common_indexes:
+            document = documents.find_one({"index_name": index})
+            if document:
+                filenames.append(document["filename"])
+        print(filenames)        
+
+        return {"index_names": common_indexes, "filenames": filenames}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -340,7 +354,15 @@ async def document_rag(request: DocumentRequest, user_id: int = Depends(get_curr
     if user_id is None:    
         raise HTTPException(status_code=401, detail="Unauthorized")
     try:
-        index_name: str = request.index_name
+        document = documents.find_one({"filename": request.filename})
+
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        # Extract the index name from the document
+        index_name = document["index_name"]
+
+        index_name: str = index_name
         vector_store: AzureSearch = AzureSearch(
             azure_search_endpoint=vector_store_address,
             azure_search_key=vector_store_password,
@@ -371,7 +393,7 @@ async def document_rag(request: DocumentRequest, user_id: int = Depends(get_curr
 
         answer = rag_chain.invoke(request.question)
 
-        documents_history.insert_one({"id": user_id, "question": request.question, "answer": answer, "index_name": request.index_name})
+        documents_history.insert_one({"id": user_id, "question": request.question, "answer": answer, "index_name": index_name})
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
