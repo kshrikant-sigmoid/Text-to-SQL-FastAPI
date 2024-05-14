@@ -278,247 +278,273 @@ export default function Home() {
         </div>
       ) : (
         <div className="container">
-          <div className="fixed top-0 left-0 h-screen bg-gray-800 text-white overflow-auto">
-            <div className="flex justify-center mt-16">
-              <div className="text-center border-b-2 border-gray-500 px-10 py-2">
-                History
-              </div>
-            </div>
-            <ul className="pt-4">
-              {Object.values(history).map((item, index) => (
-                <li
-                  key={index}
-                  onClick={() => handleQuestionClick(item)}
-                  className="px-4 py-2 hover:bg-gray-600 cursor-pointer text-center border-b-2 border-gray-500 px-10 w-56 text-sm overflow-x-auto"
-                >
-                  {item.question}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <h1
-            style={{
-              textAlign: "center",
-              fontSize: "2em",
-              marginBottom: "20px",
-            }}
-          >
-            SQL Insight Engine
-          </h1>
-          <form onSubmit={handleSubmit}>
-            <label>
-              <h2
-                style={{
-                  fontSize: "1.5em",
-                  color: "#333",
-                  marginTop: "20px",
-                  marginBottom: "10px",
-                }}
-              >
-                Enter your Question:
-              </h2>
-              <input
-                type="text"
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                className="input-field"
-              />
-            </label>
-
-            <div className="query-result" style={{ textAlign: "left" }}>
-              <h2
-                style={{
-                  fontSize: "1.5em",
-                  color: "#333",
-                  marginBottom: "10px",
-                }}
-              >
-                Select Tables (OPTIONAL):
-              </h2>
-              {allTables.map((table) => (
-                <div key={table}>
-                  <input
-                    type="checkbox"
-                    id={table}
-                    checked={selectedTables.includes(table)}
-                    onChange={() => {
-                      if (selectedTables.includes(table)) {
-                        setSelectedTables(
-                          selectedTables.filter((t) => t !== table)
-                        );
-                      } else {
-                        setSelectedTables([...selectedTables, table]);
-                      }
-                    }}
-                  />
-                  <label htmlFor={table}>&nbsp;{table}</label>
+          <div className="ml-56">
+            <div className="fixed top-0 left-0 h-screen bg-gray-800 text-white overflow-auto">
+              <div className="sticky top-0 z-10 flex justify-center mt-16">
+                <div className="text-center border-b-2 border-gray-500 px-24 py-2 z-50 bg-black">
+                  History
                 </div>
-              ))}
+              </div>
+              <ul className="overflow-auto">
+                {Object.values(history).map((item, index) => (
+                  <li
+                    key={index}
+                    onClick={() => handleQuestionClick(item)}
+                    className="px-4 py-2 hover:bg-gray-600 cursor-pointer text-center border-b-2 border-gray-500 px-10 w-56 text-sm overflow-x-auto"
+                  >
+                    {item.question}
+                  </li>
+                ))}
+              </ul>
             </div>
 
-            <br></br>
-            <button
-              type="submit"
-              className="submit-btn btn-small"
-              disabled={isLoading}
-            >
-              {isLoading ? "Processing..." : "Submit"}
-            </button>
-          </form>
-
-          <div className="query-result">
-            <h2
-              style={{ fontSize: "1.5em", color: "#333", marginBottom: "10px" }}
-            >
-              Question:
-            </h2>
-            <p>{question}</p>
-          </div>
-
-          <div className="query-result">
-            <h2
-              style={{ fontSize: "1.5em", color: "#333", marginBottom: "10px" }}
-            >
-              Selected Tables:
-            </h2>
-            <p>{selectedTables.join(", ")}</p>
-          </div>
-
-          <div className="query-result">
-            <h2
+            <h1
               style={{
-                fontSize: "1.5em",
-                color: "#333",
-                marginBottom: "10px",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
+                textAlign: "center",
+                fontSize: "2em",
+                marginBottom: "20px",
               }}
             >
-              SQL Query
-              <button className="icon-btn" onClick={() => copyCode(query)}>
-                <FaCopy />
-              </button>
-            </h2>
-            <p>{query}</p>
-          </div>
+              SQL Insight Engine
+            </h1>
+            <form onSubmit={handleSubmit}>
+              <label>
+                <h2
+                  style={{
+                    fontSize: "1.5em",
+                    color: "#333",
+                    marginTop: "20px",
+                    marginBottom: "10px",
+                  }}
+                >
+                  Enter your Question:
+                </h2>
+                <input
+                  type="text"
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                  className="input-field"
+                />
+              </label>
 
-          <div className="query-result">
-            <h2
-              style={{
-                fontSize: "1.5em",
-                color: "#333",
-                marginBottom: "10px",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              Result
-              <button className="btn btn-download" onClick={downloadCSV}>
-                <FaDownload /> Download CSV
-              </button>
-            </h2>
-            <table className="result-table">
-              <thead>
-                <tr>
-                  {Array.isArray(result) &&
-                    result.length > 0 &&
-                    result[0].map((columnName, index) => (
-                      <th key={index}>{columnName}</th>
-                    ))}
-                </tr>
-              </thead>
+              <div className="query-result" style={{ textAlign: "left" }}>
+                <h2
+                  style={{
+                    fontSize: "1.5em",
+                    color: "#333",
+                    marginBottom: "10px",
+                  }}
+                >
+                  Select Tables (OPTIONAL):
+                </h2>
+                {allTables.map((table) => (
+                  <div key={table}>
+                    <input
+                      type="checkbox"
+                      id={table}
+                      checked={selectedTables.includes(table)}
+                      onChange={() => {
+                        if (selectedTables.includes(table)) {
+                          setSelectedTables(
+                            selectedTables.filter((t) => t !== table)
+                          );
+                        } else {
+                          setSelectedTables([...selectedTables, table]);
+                        }
+                      }}
+                    />
+                    <label htmlFor={table}>&nbsp;{table}</label>
+                  </div>
+                ))}
+              </div>
 
-              <tbody>
-                {Array.isArray(result) &&
-                  result.slice(1).map((row, rowIndex) => (
-                    <tr key={rowIndex}>
-                      {row.map((cell, cellIndex) => (
-                        <td key={cellIndex}>{cell}</td>
+              <br></br>
+              <button
+                type="submit"
+                className="submit-btn btn-small"
+                disabled={isLoading}
+              >
+                {isLoading ? "Processing..." : "Submit"}
+              </button>
+            </form>
+
+            <div className="query-result">
+              <h2
+                style={{
+                  fontSize: "1.5em",
+                  color: "#333",
+                  marginBottom: "10px",
+                }}
+              >
+                Question:
+              </h2>
+              <p>{question}</p>
+            </div>
+
+            <div className="query-result">
+              <h2
+                style={{
+                  fontSize: "1.5em",
+                  color: "#333",
+                  marginBottom: "10px",
+                }}
+              >
+                Selected Tables:
+              </h2>
+              <p>{selectedTables.join(", ")}</p>
+            </div>
+
+            <div className="query-result">
+              <h2
+                style={{
+                  fontSize: "1.5em",
+                  color: "#333",
+                  marginBottom: "10px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                SQL Query
+                <button className="icon-btn" onClick={() => copyCode(query)}>
+                  <FaCopy />
+                </button>
+              </h2>
+              <p>{query}</p>
+            </div>
+
+            <div className="query-result">
+              <h2
+                style={{
+                  fontSize: "1.5em",
+                  color: "#333",
+                  marginBottom: "10px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                Result
+                <button className="btn btn-download" onClick={downloadCSV}>
+                  <FaDownload /> Download CSV
+                </button>
+              </h2>
+              <table className="result-table">
+                <thead>
+                  <tr>
+                    {Array.isArray(result) &&
+                      result.length > 0 &&
+                      result[0].map((columnName, index) => (
+                        <th key={index}>{columnName}</th>
                       ))}
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
+                  </tr>
+                </thead>
 
-          <div className="query-result">
-            <h2
-              style={{
-                fontSize: "1.5em",
-                color: "#333",
-                marginBottom: "10px",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              Insights
-              <button className="icon-btn" onClick={() => copyCode(insights)}>
-                <FaCopy />
-              </button>
-            </h2>
-            <p>{insights}</p>
-          </div>
+                <tbody>
+                  {Array.isArray(result) &&
+                    result.slice(1).map((row, rowIndex) => (
+                      <tr key={rowIndex}>
+                        {row.map((cell, cellIndex) => (
+                          <td key={cellIndex}>{cell}</td>
+                        ))}
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
 
-          <div className="query-result">
-            <h2
-              style={{ fontSize: "1.5em", color: "#333", marginBottom: "10px" }}
-            >
-              Choose Chart Type:
-            </h2>
-            <div>
-              <div>
-                <input
-                  type="radio"
-                  id="bar"
-                  name="chartType"
-                  value="bar"
-                  checked={chartType === "bar"}
-                  onChange={() => setChartType("bar")}
-                />
-                <label htmlFor="bar"> Bar Chart</label>
-              </div>
-
-              <div>
-                <input
-                  type="radio"
-                  id="line"
-                  name="chartType"
-                  value="line"
-                  checked={chartType === "line"}
-                  onChange={() => setChartType("line")}
-                />
-                <label htmlFor="line"> Line Chart</label>
-              </div>
-
-              <div>
-                <input
-                  type="radio"
-                  id="pie"
-                  name="chartType"
-                  value="pie"
-                  checked={chartType === "pie"}
-                  onChange={() => setChartType("pie")}
-                />
-                <label htmlFor="pie"> Pie Chart</label>
+            <div className="query-result">
+              <h2
+                style={{
+                  fontSize: "1.5em",
+                  color: "#333",
+                  marginBottom: "10px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                Insights
+                <button className="icon-btn" onClick={() => copyCode(insights)}>
+                  <FaCopy />
+                </button>
+              </h2>
+              <div className="prose">
+                <ul className="list-disc ml-6">
+                  {insights
+                    .split(/(?<=\.|\?|\!|\-)\s/)
+                    .map((sentence, index) => {
+                      if (sentence.trim().length >= 5) {
+                        return <li key={index}>{sentence}</li>;
+                      } else {
+                        return null;
+                      }
+                    })}
+                </ul>
               </div>
             </div>
 
-            {/* Chart Visualization */}
+            <div className="query-result">
+              <h2
+                style={{
+                  fontSize: "1.5em",
+                  color: "#333",
+                  marginBottom: "10px",
+                }}
+              >
+                Choose Chart Type:
+              </h2>
+              <div>
+                <div>
+                  <input
+                    type="radio"
+                    id="bar"
+                    name="chartType"
+                    value="bar"
+                    checked={chartType === "bar"}
+                    onChange={() => setChartType("bar")}
+                  />
+                  <label htmlFor="bar"> Bar Chart</label>
+                </div>
 
-            <div
-              className="chart-container"
-              style={{ width: "600px", margin: "0 auto" }}
-            >
-              {renderChart()}
+                <div>
+                  <input
+                    type="radio"
+                    id="line"
+                    name="chartType"
+                    value="line"
+                    checked={chartType === "line"}
+                    onChange={() => setChartType("line")}
+                  />
+                  <label htmlFor="line"> Line Chart</label>
+                </div>
+
+                <div>
+                  <input
+                    type="radio"
+                    id="pie"
+                    name="chartType"
+                    value="pie"
+                    checked={chartType === "pie"}
+                    onChange={() => setChartType("pie")}
+                  />
+                  <label htmlFor="pie"> Pie Chart</label>
+                </div>
+              </div>
+
+              {/* Chart Visualization */}
+
+              <div
+                className="chart-container"
+                style={{ width: "600px", margin: "0 auto" }}
+              >
+                {renderChart()}
+              </div>
+              <br></br>
+              <br></br>
+              <br></br>
+              <br></br>
             </div>
-            <br></br>
-            <br></br>
-            <br></br>
-            <br></br>
           </div>
         </div>
       )}
