@@ -233,6 +233,7 @@ async def run_query(request: Request, user_id: int = Depends(get_current_user)):
 
         insights = llm.invoke(f"Analyze the following data and provide insights related to sales trends and projections. Do not generate content related to programming concepts or other irrelevant topics. The question asked was: {question}. The data fetched after executing the query is: {result}")
         column_name = llm.invoke(f"Given this SQL query: {query}, and result as {result}.  Provide only the names of columns (in format ColumnName) as a Python list.have the column names in the same sequesnce as the result is being displayed , the result is a list of tuple , check for the first tuple about how much data is there , the no of column should not increase that count . Your response should only contain column names and nothing else, in the format ['column1', 'column2', 'column3', ...], without any additional explanations or prompts.")
+        insights = insights.replace("<|im_end|>","")
         start_index = column_name.find('[')
         end_index = column_name.find(']')
 
@@ -254,6 +255,7 @@ async def run_query(request: Request, user_id: int = Depends(get_current_user)):
         combined_result_str = str(combined_result)
         sql_history.insert_one({"id": user_id, "question": question, "query": query, "result": combined_result_str, "insights": insights})
     except Exception as e:
+        print(e)
         raise HTTPException(status_code=400, detail=str(e))                    
     
     return {"question": question, "query": query, "result":  combined_result, "insights": insights}
@@ -280,7 +282,6 @@ async def upload(user_id: int = Depends(get_current_user), file: UploadFile = Fi
 
         file_path = os.path.abspath(file.filename)
 
-        print(file.filename)
         with open(file_path, 'wb') as f:
             f.write(contents)
 
@@ -342,8 +343,7 @@ async def index_names(user_id: int = Depends(get_current_user)):
         for index in common_indexes:
             document = documents.find_one({"index_name": index})
             if document:
-                filenames.append(document["filename"])
-        print(filenames)        
+                filenames.append(document["filename"])     
 
         return {"index_names": common_indexes, "filenames": filenames}
     except Exception as e:
