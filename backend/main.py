@@ -5,8 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from langchain_openai import AzureOpenAI
 from langchain_community.tools.sql_database.tool import QuerySQLDataBaseTool
 from langchain.chains import create_sql_query_chain
-from langchain.sql_database import SQLDatabase
-from langchain.cache import SQLiteCache
+from langchain_community.utilities import SQLDatabase
+from langchain_community.cache import SQLiteCache
 from langchain import hub
 from langchain_openai import AzureChatOpenAI
 from langchain_community.document_loaders import AzureAIDocumentIntelligenceLoader
@@ -14,14 +14,11 @@ from langchain_openai import AzureOpenAIEmbeddings
 from langchain.schema import StrOutputParser
 from langchain.schema.runnable import RunnablePassthrough
 from langchain.text_splitter import MarkdownHeaderTextSplitter
-from langchain.vectorstores.azuresearch import AzureSearch
+from langchain_community.vectorstores import AzureSearch
 from langchain.globals import set_llm_cache
 import os
 import ast
 from dotenv import load_dotenv
-from typing import List
-import sqlite3
-from sqlite3 import Error as SQLiteError
 import secrets
 import jwt
 from datetime import datetime, timedelta
@@ -30,8 +27,15 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 from azure.search.documents.indexes import SearchIndexClient
 from azure.core.credentials import AzureKeyCredential
-import redis
 from pymongo import MongoClient
+from starlette.responses import RedirectResponse
+from authlib.integrations.starlette_client import OAuth, OAuthError
+from config import CLIENT_ID, CLIENT_SECRET
+from fastapi_sessions.backends.implementations import InMemoryBackend
+from fastapi_sessions.session_verifier import SessionVerifier
+from fastapi_sessions.frontends.implementations import SessionCookie, CookieParameters
+from typing import Optional
+import uuid
 
 load_dotenv()
 
@@ -61,7 +65,19 @@ app.add_middleware(
 
 SECRET_KEY = secrets.token_hex(32)
 ALGORITHM = "HS256"
-app.add_middleware(SessionMiddleware, secret_key = SECRET_KEY, max_age = 3600)
+app.add_middleware(SessionMiddleware, secret_key = SECRET_KEY)
+
+oauth = OAuth()
+oauth.register(
+    name='google',
+    server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+    client_id=CLIENT_ID,
+    client_secret=CLIENT_SECRET,
+    client_kwargs={
+        'scope': 'email openid profile',
+        'redirect_url': 'http://localhost:8000/auth'
+    }
+)
 
 client = MongoClient("mongodb://localhost:27017/")
 db = client["user_db"]
@@ -87,7 +103,7 @@ set_llm_cache(cache)
 
 # client = redis.Redis.from_url('redis://localhost:6379/0')
 
-from langchain.cache import RedisSemanticCache
+# from langchain.cache import RedisSemanticCache
 
 
 db = SQLDatabase.from_uri("sqlite:///data/Chinook.db")
@@ -138,32 +154,33 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 #     return {"message": "User registered successfully"}
 
 
-@app.post("/googlelogin/")
-async def google_login(request: Request):
-    try:
-        data = await request.json()
-        jwtToken = data.get('jwtToken')
+# @app.post("/googlelogin/")
+# async def google_login(request: Request):
+#     try:
+#         data = await request.json()
+#         jwtToken = data.get('jwtToken')
         
-        token = jwt.decode(jwtToken, algorithms=["RS256"], options={"verify_signature":False})
-        id = token.get('email')
-        username = token.get('given_name')
-        try:
-            user_in_db = user.find_one({"id": id, "username": username})
-            if user_in_db:
-                id = str(user_in_db["id"])
-            else:
-                new_user = {"id": id, "username": username}
-                inserted_user = user.insert_one(new_user)
-                id = str(inserted_user.inserted_id)
-            expire = datetime.utcnow() + timedelta(minutes=15)
-            token_data = {"id": id, "username": username, "exp": expire}
-            token = jwt.encode(token_data, SECRET_KEY, algorithm=ALGORITHM)
-            request.session["user_id"] = id
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=str(e)) 
-        return {"message": "Login successful", "token": token}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail="Something failed, try again")
+#         token = jwt.decode(jwtToken, algorithms=["RS256"], options={"verify_signature":False})
+#         id = token.get('email')
+#         username = token.get('given_name')
+#         try:
+#             user_in_db = user.find_one({"id": id, "username": username})
+#             if user_in_db:
+#                 id = str(user_in_db["id"])
+#             else:
+#                 new_user = {"id": id, "username": username}
+#                 inserted_user = user.insert_one(new_user)
+#                 id = str(inserted_user.inserted_id)
+#             expire = datetime.utcnow() + timedelta(minutes=15)
+#             token_data = {"id": id, "username": username, "exp": expire}
+#             token = jwt.encode(token_data, SECRET_KEY, algorithm=ALGORITHM)
+#             request.session["user_id"] = id
+#         except Exception as e:
+#             raise HTTPException(status_code=400, detail=str(e)) 
+#         return {"message": "Login successful", "token": token}
+#     except Exception as e:
+#         print(e)
+#         raise HTTPException(status_code=400, detail="Something failed, try again")
 
 
 # # Login
@@ -183,6 +200,37 @@ async def google_login(request: Request):
 #         return {"message": "Login successful", "token": token}
 #     else:
 #         raise HTTPException(status_code=400, detail="Invalid username or password")
+
+
+@app.get("/login/")
+async def login(request: Request):
+    url = request.url_for('auth')
+    return await oauth.google.authorize_redirect(request, url)
+
+
+@app.get('/auth')
+async def auth(request: Request):
+    try:
+        token = await oauth.google.authorize_access_token(request)
+    except OAuthError as e:
+        raise HTTPException(status_code=400, detail=e)
+    user_info = token.get('userinfo')
+    if user_info:
+        request.session['user'] = dict(user_info)
+        email = user_info.get('email')
+        name = user_info.get('given_name')
+        user_in_db = user.find_one({"id": email})
+        if not user_in_db:
+            new_user = {"id": email, "username": name}
+            user.insert_one(new_user)  
+    return {"message": "Login Successful", "token": token["access_token"]}
+
+
+@app.get('/logout')
+def logout(request: Request):
+    request.session.pop('user')
+    request.session.clear()
+    return RedirectResponse('/')
     
 # Define endpoints
 @app.get("/")

@@ -3,8 +3,8 @@ import { useState, useEffect } from "react";
 import { FaCopy, FaDownload } from "react-icons/fa";
 import axios from "../services/axiosConfig";
 import { Link } from "react-router-dom";
-import { MdMoreVert, MdClose } from "react-icons/md";
-import { useNavigate } from "react-router-dom";
+// import { MdMoreVert, MdClose } from "react-icons/md";
+// import { useNavigate } from "react-router-dom";
 import History from "./History";
 
 export default function Home() {
@@ -17,8 +17,8 @@ export default function Home() {
   const [isClient, setIsClient] = useState(false);
   const [insights, setInsights] = useState("");
   const [allTables, setAllTables] = useState([]);
-  const [dropdownVisible, setDropdownVisible] = useState(false);
-  const navigate = useNavigate();
+  // const [dropdownVisible, setDropdownVisible] = useState(false);
+  // const navigate = useNavigate();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isQuestionSelected, setIsQuestionSelected] = useState(false);
   const [selectedQuestion, setSelectedQuestion] = useState(null);
@@ -39,7 +39,9 @@ export default function Home() {
 
   const fetchHistory = async () => {
     try {
-      const response = await axios.get(`http://localhost:8000/history/`);
+      const response = await axios.get(`http://localhost:8000/history/`, {
+        withCredentials: true,
+      });
       setHistory(response.data.history);
     } catch (error) {
       console.error(error);
@@ -72,18 +74,18 @@ export default function Home() {
     );
   }
 
-  const handleLogout = () => {
-    document.cookie = "token=; expired=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-    navigate("/");
-  };
+  // const handleLogout = () => {
+  //   document.cookie = "token=; expired=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+  //   navigate("/");
+  // };
 
-  const handleQuestionSelect = (question, query, result, insights) => {
-    setIsQuestionSelected(true);
-    setQuestion(question);
-    setQuery(query);
-    setResult(result);
-    setInsights(insights);
-  };
+  // const handleQuestionSelect = (question, query, result, insights) => {
+  //   setIsQuestionSelected(true);
+  //   setQuestion(question);
+  //   setQuery(query);
+  //   setResult(result);
+  //   setInsights(insights);
+  // };
 
   const copyCode = (code) => {
     if (typeof window !== "undefined") {

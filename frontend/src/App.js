@@ -13,7 +13,7 @@ import axios from "axios";
 
 export default function App() {
   const [showHistory, setShowHistory] = useState(false);
-  const [showUpload, setShowUpload] = useState(false);
+  // const [showUpload, setShowUpload] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
   const [username, setUsername] = useState("");
 
@@ -51,9 +51,9 @@ export default function App() {
     }
   };
 
-  const handleLogin = () => {
-    setLoggedIn(true);
-  };
+  // const handleLogin = () => {
+  //   setLoggedIn(true);
+  // };
 
   const handleLogout = () => {
     // Clear the token from the cookie

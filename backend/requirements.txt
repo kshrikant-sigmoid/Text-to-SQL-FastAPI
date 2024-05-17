@@ -7,7 +7,7 @@ python-dotenv
 fastapi
 uvicorn
 itsdangerous
-jwt
+PyJWT
 openai
 tiktoken
 azure-ai-documentintelligence

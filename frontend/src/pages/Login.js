@@ -1,50 +1,28 @@
-import React, { useState } from "react";
-import axios from "axios";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { GoogleLogin } from "@react-oauth/google";
-import Cookies from 'js-cookie';
+import axios from "axios" ;
 
 function Login() {
-  const [jwtToken, setJwtToken] = useState(""); 
   const navigate = useNavigate();
+  const [token, setToken] = useState(null);
 
-  const handleGoogleSubmit = async (event) => {
-    if (event) event.preventDefault();
-    try {
-      const response = await axios.post("http://localhost:8000/googlelogin/", {
-        jwtToken,
-      });
-      if (response.data.token) {
-        // Set the token as a cookie
-        document.cookie = `token=${response.data.token}; max-age=1800`; // expires after 30 minutes
-        navigate("/query", { state: { message: response.data.message } });
-        window.location.reload();
-      }
-    } catch (error) {
-      if (error.response && error.response.data && error.response.data.detail) {
-        alert(error.response.data.detail);
-      } else {
-        alert("An error occurred while logging in.");
-      }
-    }
+  const handleGoogleSubmit = () => {
+    // Redirect the user to your /login endpoint
+    window.location.href = "http://localhost:8000/login/";
   };
 
   return (
-<div className="flex justify-center items-center h-screen bg-gray-300 bg-opacity-50">
-  <div className="p-6 max-w-sm mx-auto bg-white rounded-xl shadow-md flex flex-col items-center space-y-4">
-    <h1>Login Using Google</h1>
-    <GoogleLogin
-      onSuccess={(credentialResponse) => {
-        setJwtToken(credentialResponse.credential);
-        handleGoogleSubmit();
-      }}
-      onError={() => {
-        console.log("Login Failed");
-      }}
-      className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded"
-    />
-  </div>
-</div>
+    <div className="flex justify-center items-center h-screen bg-gray-300 bg-opacity-50">
+      <div className="p-6 max-w-sm mx-auto bg-white rounded-xl shadow-md flex flex-col items-center space-y-4">
+        <h1>Login Using Google</h1>
+        <button
+          onClick={handleGoogleSubmit}
+          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded"
+        >
+          Login with Google
+        </button>
+      </div>
+    </div>
   );
 }
 
