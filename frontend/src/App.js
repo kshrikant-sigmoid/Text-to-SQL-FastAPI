@@ -8,6 +8,8 @@ import History from "./pages/History.js";
 import DocumentQuery from "./pages/Document.js";
 import FileUpload from "./pages/Upload.js";
 import DocumentHistory from "./pages/DocumentHistory.js";
+import AudioFileUpload from "./pages/AudioUpload.js";
+import AudioQuery from "./pages/Audio.js";
 import { useState, useEffect } from "react";
 import axios from "axios";
 
@@ -96,6 +98,20 @@ export default function App() {
                 </Link>
               </li>
             )}
+            {loggedIn && (
+              <li>
+                <Link to="/audio">
+                  <button
+                    onClick={() => {
+                      setShowHistory(false);
+                    }}
+                    className="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
+                  >
+                    Audio
+                  </button>
+                </Link>
+              </li>
+            )}
           </ul>
           {loggedIn ? (
             <>
@@ -125,6 +141,8 @@ export default function App() {
         <Route path="/fileupload" element={<FileUpload />} />
         <Route path="/document" element={<DocumentQuery />} />
         <Route path="/documenthistory" element={<DocumentHistory />} />
+        <Route path="/uploadAudio" element={<AudioFileUpload/>}/>
+        <Route path="/audio" element={<AudioQuery />} />
       </Routes>
     </Router>
   );

@@ -19,9 +19,6 @@ from langchain.globals import set_llm_cache
 import os
 import ast
 from dotenv import load_dotenv
-from typing import List
-import sqlite3
-from sqlite3 import Error as SQLiteError
 import secrets
 import jwt
 from datetime import datetime, timedelta
@@ -30,12 +27,20 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 from azure.search.documents.indexes import SearchIndexClient
 from azure.core.credentials import AzureKeyCredential
-import redis
 from pymongo import MongoClient
+from langchain_community.document_loaders import AssemblyAIAudioTranscriptLoader
+from assemblyai import TranscriptionConfig
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain.vectorstores import Chroma
+from langchain.chains import RetrievalQA
+from moviepy.editor import VideoFileClip
 
 load_dotenv()
 
 app = FastAPI()
+
+class TranscriptResponse(BaseModel):
+    transcript: str
 
 class DocumentRequest(BaseModel):
     question: str
@@ -44,6 +49,9 @@ class DocumentRequest(BaseModel):
 class User(BaseModel):
     username: str
     password: str  
+
+class Query(BaseModel):
+    query: str    
 
 origins = [
     "http://localhost:3000",
@@ -69,6 +77,10 @@ user = db["users"]
 sql_history = db["sql_history"]
 documents = db["documents"]
 documents_history = db["documents_history"]
+audios = db["audios"]
+audio_history = db["audio_history"]
+videos = db["videos"]
+video_history = db["videos_history"]
 
 # def get_db():
 #     conn = sqlite3.connect('user_database.db')  # Replace 'database.db' with the path to your database file
@@ -125,6 +137,40 @@ def get_index(name):
     result = client.get_index(name)
     return result
 
+
+def convert_video_to_mp3(video_path, output_path='./transcripts/transcript.txt'):
+    # Load the video file
+    video = VideoFileClip(video_path)
+    
+    # Extract audio and write it to the output file
+    video.audio.write_audiofile(output_path, codec='mp3')
+
+    return output_path
+
+def generate_transcript(file):
+    audio_file = file
+    config = TranscriptionConfig(
+        speaker_labels=True,
+    )
+    loader = AssemblyAIAudioTranscriptLoader(file_path=audio_file,
+                                         api_key=os.environ['ASSEMBLYAI_API_KEY'],
+                                         config=config)
+
+    docs = loader.load()
+    transcript_file = "./transcripts/transcript.txt"
+    with open(transcript_file, "w") as f:
+        f.write(docs[0].page_content)
+
+    combined_docs = [doc.page_content for doc in docs]
+    text = " ".join(combined_docs)   
+
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=150)
+    splits = text_splitter.split_text(text)
+
+    os.remove(transcript_file)
+
+    return splits
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 # # New user registration
@@ -155,7 +201,7 @@ async def google_login(request: Request):
                 new_user = {"id": id, "username": username}
                 inserted_user = user.insert_one(new_user)
                 id = str(inserted_user.inserted_id)
-            expire = datetime.utcnow() + timedelta(minutes=15)
+            expire = datetime.utcnow() + timedelta(minutes=45)
             token_data = {"id": id, "username": username, "exp": expire}
             token = jwt.encode(token_data, SECRET_KEY, algorithm=ALGORITHM)
             request.session["user_id"] = id
@@ -255,7 +301,6 @@ async def run_query(request: Request, user_id: int = Depends(get_current_user)):
         combined_result_str = str(combined_result)
         sql_history.insert_one({"id": user_id, "question": question, "query": query, "result": combined_result_str, "insights": insights})
     except Exception as e:
-        print(e)
         raise HTTPException(status_code=400, detail=str(e))                    
     
     return {"question": question, "query": query, "result":  combined_result, "insights": insights}
@@ -371,7 +416,6 @@ async def document_rag(request: DocumentRequest, user_id: int = Depends(get_curr
         )
         
         # Retrieve relevant chunks based on the question
-
         retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 3})
         
         prompt = hub.pull("rlm/rag-prompt")
@@ -408,9 +452,142 @@ async def get_history(user_id: int = Depends(get_current_user)):
         history_records_cursor = documents_history.find({"id": user_id})
         history = {str(record["_id"]): dict(id=record["id"], question=record["question"], answer=record["answer"], filename=record["index_name"]) for record in history_records_cursor}
     except Exception as e:
-        print(e)
         raise HTTPException(status_code=400, detail=str(e)) 
     return {"history": history}
+
+
+# Audio Upload
+@app.post("/uploadAudio")
+async def upload_audio(request: UploadFile = File(...), user_id:  int = Depends(get_current_user)):
+    file_path = os.path.abspath(request.filename)
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    try:
+        audio = audios.find_one({"audio_file":request.filename})
+        if not audio:
+            splits = generate_transcript(file_path)
+            audios.insert_one({"id":user_id, "audio":request.filename, "splits":splits})
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# Get Audios
+@app.get("/audioNames")
+async def index_names(user_id: int = Depends(get_current_user)):
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    try:
+        audio_names_cursor = audios.find({"id": user_id}, {"audio": 1, "_id": 0})
+        audio_names = [doc["audio"] for doc in audio_names_cursor]
+
+        return {"audio_names": audio_names}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+@app.get("/transcript/{filename}", response_model=TranscriptResponse)
+async def get_transcript(filename: str, user_id: int = Depends(get_current_user)):
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    try:
+        audio = audios.find_one({"audio": filename})
+        if audio is None:
+            raise HTTPException(status_code=404, detail="Audio not found")
+        transcript = " ".join(audio['splits'])
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    return {"transcript": transcript}
+    
+
+# Audio Query
+@app.post("/audio")
+async def audio_rag(request: DocumentRequest, user_id: int = Depends(get_current_user)):
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    try:
+        audio = audios.find_one({"audio":request.filename})
+        splits = audio['splits']
+        docsearch = Chroma.from_texts(splits, aoai_embeddings)
+        retrieval_qa = RetrievalQA.from_chain_type(
+            llm=llm, 
+            chain_type="stuff", 
+            retriever=docsearch.as_retriever()
+        )
+
+        answer = retrieval_qa.run(request.question)
+
+        audio_history.insert_one({"id":user_id, "audio":request.filename, "question": request.question, "answer": answer })
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    return{"question": request.question, "answer": answer, "transcript": " ".join(splits)}   
+
+# History of Audio
+@app.get("/audioHistory/")
+async def get_history(user_id: int = Depends(get_current_user)):
+    try:
+        history_records_cursor = audio_history.find({"id": user_id})
+        history = {str(record["_id"]): dict(id=record["id"], question=record["question"], answer=record["answer"]) for record in history_records_cursor}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) 
+    return {"history": history}
+
+
+# Video Upload
+@app.post("/uploadVideo")
+async def upload_video(request: DocumentRequest, user_id:  int = Depends(get_current_user)):
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    try:
+        video = videos.find_one({"video_file":request.video})
+
+        if not video:
+            audio = convert_video_to_mp3(request.video)
+            splits = generate_transcript(audio)
+            videos.insert_one({"id":user_id, "video":video, "splits":splits})
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# Get Videos
+@app.get("/videoNames/")
+async def index_names(user_id: int = Depends(get_current_user)):
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    try:
+        video_names_cursor = videos.find({"id": user_id}, {"video": 1, "_id": 0})
+        video_names = [doc["video"] for doc in video_names_cursor]
+
+        return {"video_names": video_names}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+
+# video Query
+@app.post("/video")
+async def video_rag(request: DocumentRequest, user_id: int = Depends(get_current_user)):
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    try:
+        video = videos.find_one({"video":request.video})
+        splits = video['splits']
+        docsearch = Chroma.from_texts(splits, aoai_embeddings)
+        retrieval_qa = RetrievalQA.from_chain_type(
+            llm=llm, 
+            chain_type="stuff", 
+            retriever=docsearch.as_retriever()
+        )
+
+        answer = retrieval_qa.run(request.question)
+
+        video_history.insert_one({"id":user_id, "video":video, "question": request.question, "answer": answer })
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    return{"question": request.question, "answer": answer} 
+        
 
 @app.get("/get-user")
 async def read_current_user(current_user_id: User = Depends(get_current_user)):

@@ -7,7 +7,7 @@ python-dotenv
 fastapi
 uvicorn
 itsdangerous
-jwt
+PyJWT
 openai
 tiktoken
 azure-ai-documentintelligence
@@ -15,3 +15,7 @@ azure-identity
 azure-search-documents==11.6.0b3
 redis
 pymongo
+moviepy
+assemblyai
+ffmpeg-python
+chromadb
