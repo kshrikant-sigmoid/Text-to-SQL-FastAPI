@@ -3,6 +3,7 @@ import { toast } from "react-toastify";
 import { Link } from "react-router-dom";
 import "react-toastify/dist/ReactToastify.css";
 import axios from "../services/axiosConfig";
+import { FaDownload } from "react-icons/fa";
 
 const AudioQuery = () => {
   const [question, setQuestion] = useState("");
@@ -13,7 +14,7 @@ const AudioQuery = () => {
   const [responseFilename, setResponseFilename] = useState("");
   const [transcript, setTranscript] = useState("");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [isLoading, setIsLoading] = useState(false); // Add isLoading state
+  const [isLoading, setIsLoading] = useState(false);
 
   const [history, setHistory] = useState({});
 
@@ -35,7 +36,7 @@ const AudioQuery = () => {
         );
         setHistory(response.data.history);
       } catch (error) {
-        console.error("An error occurred:", error);
+        toast.error("An error occurred:", error);
       }
     };
 
@@ -60,7 +61,7 @@ const AudioQuery = () => {
           setFilenames(response.data.audio_names);
         }
       } catch (error) {
-        console.error("An error occurred:", error);
+        toast.error("An error occurred:", error);
       }
     };
 
@@ -75,7 +76,7 @@ const AudioQuery = () => {
     setSelectedFilename(event.target.value);
     try {
       const response = await axios.get(
-        `http://localhost:8000/transcript/${event.target.value}`,
+        `http://localhost:8000/audiotranscript/${event.target.value}`,
         { withCredentials: true }
       );
 
@@ -90,7 +91,7 @@ const AudioQuery = () => {
   };
 
   const onQuerySubmit = async () => {
-    setIsLoading(true); // Set isLoading to true when query starts
+    setIsLoading(true);
     try {
       const response = await axios.post(
         "http://localhost:8000/audio",
@@ -105,13 +106,23 @@ const AudioQuery = () => {
         setResponseQuestion(response.data.question);
         setResponseAnswer(response.data.answer);
       } else {
-        console.error("Failed to process query");
+        toast.error("Failed to process query");
       }
     } catch (error) {
       console.error("An error occurred:", error);
     } finally {
-      setIsLoading(false); // Set isLoading to false when query finishes
+      setIsLoading(false);
     }
+  };
+
+  const downloadTranscript = () => {
+    const element = document.createElement("a");
+    const file = new Blob([transcript], { type: "text/plain" });
+    element.href = URL.createObjectURL(file);
+    element.download = "transcript.txt";
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
   };
 
   return !isLoggedIn ? (
@@ -123,8 +134,8 @@ const AudioQuery = () => {
     </div>
   ) : (
     <div className="container mx-auto p-4 text-center relative">
-      <div className="ml-56">
-        <div className=" p-4 mb-4">
+      <div className="ml-42 -mr-56">
+        <div className="p-4 mb-4">
           <h1
             className="font-bold"
             style={{
@@ -133,7 +144,7 @@ const AudioQuery = () => {
               marginBottom: "20px",
             }}
           >
-            Chat With Document
+            Audio Transcript
           </h1>
         </div>
         <div className="border border-gray-300 rounded-md p-4 mb-4">
@@ -155,7 +166,7 @@ const AudioQuery = () => {
                     className="bg-pink-400 hover:bg-pink-500 text-white font-bold py-1 px-2 rounded"
                     style={{ backgroundColor: "#DB7093", fontSize: "0.8rem" }}
                   >
-                    Upload New File
+                    Upload New Audio File
                   </button>
                 </Link>
               </div>
@@ -165,7 +176,7 @@ const AudioQuery = () => {
               onChange={onFilenameChange}
               className="border border-gray-300 rounded-md px-4 py-2 w-full text-center"
             >
-              <option value="">Select a File</option>
+              <option value="">Select an Audio File</option>
               {filenames.map((filename) => (
                 <option key={filename} value={filename}>
                   {filename}
@@ -176,7 +187,7 @@ const AudioQuery = () => {
         </div>
         <div className="border border-gray-300 rounded-md p-4 mb-4">
           <div className="mb-8">
-            <div className="mb-4">
+            <div className="mb-4 flex justify-between items-center">
               <h2
                 style={{
                   fontSize: "1.2em",
@@ -186,16 +197,27 @@ const AudioQuery = () => {
               >
                 Transcript:
               </h2>
-              <div
+              <button
+                onClick={downloadTranscript}
+                className="bg-pink-400 hover:bg-pink-500 text-white font-bold py-1 px-2 rounded-full flex items-center justify-center"
                 style={{
-                  maxHeight: "7em",
-                  overflowY: "auto",
-                  whiteSpace: "pre-wrap",
-                  lineHeight: "1em",
+                  width: "2.5rem",
+                  height: "2.5rem",
+                  backgroundColor: "#DB7093",
                 }}
               >
-                {transcript}
-              </div>
+                <FaDownload />
+              </button>
+            </div>
+            <div
+              style={{
+                maxHeight: "7em",
+                overflowY: "auto",
+                whiteSpace: "pre-wrap",
+                lineHeight: "1em",
+              }}
+            >
+              {transcript}
             </div>
           </div>
         </div>

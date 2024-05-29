@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { toast } from "react-toastify";
 import { Link } from "react-router-dom";
+import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import axios from "../services/axiosConfig";
 
@@ -109,7 +109,7 @@ const DocumentQuery = () => {
     </div>
   ) : (
     <div className="container mx-auto p-4 text-center relative">
-      <div className="ml-56">
+      <div className="ml-42 -mr-56">
         <div className=" p-4 mb-4">
           <h1
             className="font-bold"

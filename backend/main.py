@@ -6,7 +6,7 @@ from langchain_openai import AzureOpenAI
 from langchain_community.tools.sql_database.tool import QuerySQLDataBaseTool
 from langchain.chains import create_sql_query_chain
 from langchain.sql_database import SQLDatabase
-from langchain.cache import SQLiteCache
+from langchain_community.cache import SQLiteCache
 from langchain import hub
 from langchain_openai import AzureChatOpenAI
 from langchain_community.document_loaders import AzureAIDocumentIntelligenceLoader
@@ -31,7 +31,7 @@ from pymongo import MongoClient
 from langchain_community.document_loaders import AssemblyAIAudioTranscriptLoader
 from assemblyai import TranscriptionConfig
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain.vectorstores import Chroma
+from langchain_community.vectorstores import Chroma
 from langchain.chains import RetrievalQA
 from moviepy.editor import VideoFileClip
 
@@ -138,12 +138,24 @@ def get_index(name):
     return result
 
 
-def convert_video_to_mp3(video_path, output_path='./transcripts/transcript.txt'):
-    # Load the video file
-    video = VideoFileClip(video_path)
-    
-    # Extract audio and write it to the output file
-    video.audio.write_audiofile(output_path, codec='mp3')
+def convert_video_to_mp3(video_path):
+    try:
+        # Load the video file
+        video = VideoFileClip(video_path)
+    except Exception as e:
+        return None
+
+    # Create the output path
+    base_name = os.path.basename(video_path)
+    name_without_ext = os.path.splitext(base_name)[0]
+    dir_name = os.path.dirname(video_path)
+    output_path = os.path.join(dir_name, f"{name_without_ext}.mp3")
+
+    try:
+        # Extract audio and write it to the output file
+        video.audio.write_audiofile(output_path, codec='mp3')
+    except Exception as e:
+        return None
 
     return output_path
 
@@ -484,7 +496,7 @@ async def index_names(user_id: int = Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
     
-@app.get("/transcript/{filename}", response_model=TranscriptResponse)
+@app.get("/audiotranscript/{filename}", response_model=TranscriptResponse)
 async def get_transcript(filename: str, user_id: int = Depends(get_current_user)):
     if user_id is None:
         raise HTTPException(status_code=401, detail="Unauthorized")
@@ -536,22 +548,24 @@ async def get_history(user_id: int = Depends(get_current_user)):
 
 # Video Upload
 @app.post("/uploadVideo")
-async def upload_video(request: DocumentRequest, user_id:  int = Depends(get_current_user)):
+async def upload_video(request: UploadFile = File(...), user_id:  int = Depends(get_current_user)):
+    file_path = os.path.abspath(request.filename)
     if user_id is None:
         raise HTTPException(status_code=401, detail="Unauthorized")
     try:
-        video = videos.find_one({"video_file":request.video})
-
+        video = videos.find_one({"video_file":request.filename})
         if not video:
-            audio = convert_video_to_mp3(request.video)
+            audio = convert_video_to_mp3(file_path)
+            if audio is None:
+                raise HTTPException(status_code=400, detail="Error converting video to audio")
             splits = generate_transcript(audio)
-            videos.insert_one({"id":user_id, "video":video, "splits":splits})
+            videos.insert_one({"id":user_id, "video":request.filename, "splits":splits})
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 # Get Videos
-@app.get("/videoNames/")
+@app.get("/videoNames")
 async def index_names(user_id: int = Depends(get_current_user)):
     if user_id is None:
         raise HTTPException(status_code=401, detail="Unauthorized")
@@ -563,6 +577,19 @@ async def index_names(user_id: int = Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
     
+@app.get("/videotranscript/{filename}", response_model=TranscriptResponse)
+async def get_transcript(filename: str, user_id: int = Depends(get_current_user)):
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    try:
+        video = videos.find_one({"video": filename})
+        if video is None:
+            raise HTTPException(status_code=404, detail="video not found")
+        transcript = " ".join(video['splits'])
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    return {"transcript": transcript}
 
 # video Query
 @app.post("/video")
@@ -570,7 +597,7 @@ async def video_rag(request: DocumentRequest, user_id: int = Depends(get_current
     if user_id is None:
         raise HTTPException(status_code=401, detail="Unauthorized")
     try:
-        video = videos.find_one({"video":request.video})
+        video = videos.find_one({"video":request.filename})
         splits = video['splits']
         docsearch = Chroma.from_texts(splits, aoai_embeddings)
         retrieval_qa = RetrievalQA.from_chain_type(
@@ -581,12 +608,23 @@ async def video_rag(request: DocumentRequest, user_id: int = Depends(get_current
 
         answer = retrieval_qa.run(request.question)
 
-        video_history.insert_one({"id":user_id, "video":video, "question": request.question, "answer": answer })
+        video_history.insert_one({"id":user_id, "video":request.filename, "question": request.question, "answer": answer })
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
     
-    return{"question": request.question, "answer": answer} 
+    return{"question": request.question, "answer": answer, "transcript": " ".join(splits)}  
+
+
+# History of video
+@app.get("/videoHistory/")
+async def get_history(user_id: int = Depends(get_current_user)):
+    try:
+        history_records_cursor = video_history.find({"id": user_id})
+        history = {str(record["_id"]): dict(id=record["id"], question=record["question"], answer=record["answer"]) for record in history_records_cursor}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) 
+    return {"history": history}
         
 
 @app.get("/get-user")

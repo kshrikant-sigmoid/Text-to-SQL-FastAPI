@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Route, Routes, Link } from "react-router-dom";
-import { ToastContainer } from "react-toastify";
+import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import Register from "./pages/Register.js";
 import Login from "./pages/Login.js";
@@ -10,6 +10,8 @@ import FileUpload from "./pages/Upload.js";
 import DocumentHistory from "./pages/DocumentHistory.js";
 import AudioFileUpload from "./pages/AudioUpload.js";
 import AudioQuery from "./pages/Audio.js";
+import VideoFileUpload from "./pages/VideoUpload.js";
+import VideoQuery from "./pages/Video.js";
 import { useState, useEffect } from "react";
 import axios from "axios";
 
@@ -49,7 +51,7 @@ export default function App() {
       });
       setUsername(response.data.username);
     } catch (error) {
-      console.error(error);
+      toast.error(error);
     }
   };
 
@@ -69,7 +71,7 @@ export default function App() {
       <ToastContainer />
       <div className="bg-gray-800">
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center ml-48 h-16">
-          <ul className="flex space-x-4">
+          <ul className="flex">
             {loggedIn && (
               <li>
                 <Link to="/query">
@@ -77,7 +79,7 @@ export default function App() {
                     onClick={() => {
                       setShowHistory(!showHistory);
                     }}
-                    className="text-gray-300 hover:bg-gray-700 hover:text-white px-8 py-2 rounded-md text-sm font-medium"
+                    className="text-gray-300 hover:bg-gray-700 hover:text-white px-6 py-2 rounded-md text-sm font-medium"
                   >
                     SQL Insight Engine
                   </button>
@@ -91,7 +93,7 @@ export default function App() {
                     onClick={() => {
                       setShowHistory(false);
                     }}
-                    className="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
+                    className="text-gray-300 hover:bg-gray-700 hover:text-white px-2 py-2 rounded-md text-sm font-medium"
                   >
                     Document
                   </button>
@@ -105,9 +107,23 @@ export default function App() {
                     onClick={() => {
                       setShowHistory(false);
                     }}
-                    className="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
+                    className="text-gray-300 hover:bg-gray-700 hover:text-white px-2 py-2 rounded-md text-sm font-medium"
                   >
                     Audio
+                  </button>
+                </Link>
+              </li>
+            )}
+            {loggedIn && (
+              <li>
+                <Link to="/video">
+                  <button
+                    onClick={() => {
+                      setShowHistory(false);
+                    }}
+                    className="text-gray-300 hover:bg-gray-700 hover:text-white px-2 py-2 rounded-md text-sm font-medium"
+                  >
+                    Video
                   </button>
                 </Link>
               </li>
@@ -118,7 +134,7 @@ export default function App() {
               <p className="text-gray-300 text-sm font-medium mr-28">{`Welcome ${username}`}</p>
               <button
                 onClick={handleLogout}
-                className="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
+                className="text-gray-300 hover:bg-gray-700 hover:text-white py-2 rounded-md text-sm font-medium"
               >
                 Logout
               </button>
@@ -141,8 +157,10 @@ export default function App() {
         <Route path="/fileupload" element={<FileUpload />} />
         <Route path="/document" element={<DocumentQuery />} />
         <Route path="/documenthistory" element={<DocumentHistory />} />
-        <Route path="/uploadAudio" element={<AudioFileUpload/>}/>
+        <Route path="/uploadAudio" element={<AudioFileUpload />} />
         <Route path="/audio" element={<AudioQuery />} />
+        <Route path="/uploadVideo" element={<VideoFileUpload />} />
+        <Route path="/video" element={<VideoQuery />} />
       </Routes>
     </Router>
   );

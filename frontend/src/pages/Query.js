@@ -3,7 +3,8 @@ import { useState, useEffect } from "react";
 import { FaCopy, FaDownload } from "react-icons/fa";
 import axios from "../services/axiosConfig";
 import { Link } from "react-router-dom";
-import { MdMoreVert, MdClose } from "react-icons/md";
+import { toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 import { useNavigate } from "react-router-dom";
 import History from "./History";
 
@@ -278,10 +279,10 @@ export default function Home() {
         </div>
       ) : (
         <div className="container">
-          <div className="ml-56">
+          <div className="ml-42 -mr-56">
             <div className="fixed top-0 left-0 h-screen bg-gray-800 text-white overflow-auto">
               <div className="sticky top-0 z-10 flex justify-center mt-16">
-                <div className="text-center border-b-2 border-gray-500 px-24 py-2 z-50 bg-black">
+                <div className="text-center border-b-2 border-gray-500 px-20 py-2 z-50 bg-black">
                   History
                 </div>
               </div>
@@ -323,7 +324,7 @@ export default function Home() {
                   type="text"
                   value={question}
                   onChange={(e) => setQuestion(e.target.value)}
-                  className="input-field"
+                  className="w-full h-18 text-lg"
                 />
               </label>
 
@@ -337,25 +338,27 @@ export default function Home() {
                 >
                   Select Tables (OPTIONAL):
                 </h2>
-                {allTables.map((table) => (
-                  <div key={table}>
-                    <input
-                      type="checkbox"
-                      id={table}
-                      checked={selectedTables.includes(table)}
-                      onChange={() => {
-                        if (selectedTables.includes(table)) {
-                          setSelectedTables(
-                            selectedTables.filter((t) => t !== table)
-                          );
-                        } else {
-                          setSelectedTables([...selectedTables, table]);
-                        }
-                      }}
-                    />
-                    <label htmlFor={table}>&nbsp;{table}</label>
-                  </div>
-                ))}
+                <div className="grid grid-cols-3">
+                  {allTables.map((table) => (
+                    <div key={table} className="pl-24">
+                      <input
+                        type="checkbox"
+                        id={table}
+                        checked={selectedTables.includes(table)}
+                        onChange={() => {
+                          if (selectedTables.includes(table)) {
+                            setSelectedTables(
+                              selectedTables.filter((t) => t !== table)
+                            );
+                          } else {
+                            setSelectedTables([...selectedTables, table]);
+                          }
+                        }}
+                      />
+                      <label htmlFor={table}>&nbsp;{table}</label>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <br></br>
@@ -425,7 +428,10 @@ export default function Home() {
                 }}
               >
                 Result
-                <button className="btn btn-download" onClick={downloadCSV}>
+                <button
+                  className="btn btn-download text-sm px-2 py-1"
+                  onClick={downloadCSV}
+                >
                   <FaDownload /> Download CSV
                 </button>
               </h2>
